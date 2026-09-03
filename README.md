@@ -12,6 +12,10 @@ Orbit is Postman's API discovery service built specifically for AI agent consump
 claude plugin add Postman-Devrel/orbit-claudecode-plugin
 ```
 
+The plugin bundles Orbit's MCP server, so there's nothing else to configure -- no API
+key, no `claude mcp add`. Installing the plugin wires up the `search` and `integrate`
+tools, and the skill drives them.
+
 ## Usage
 
 ```
@@ -58,6 +62,20 @@ Orbit works best when you use it at the start of a project to build an API bluep
 6. **Save the blueprint.** The agent saves results to `orbit-output/` as a structured file you can reference throughout the project. This becomes your API design document, readable by both humans and agents.
 
 The goal is to make API selection decisions intentionally at design time, not discover limitations mid-sprint after you've already integrated half the stack.
+
+## How it works
+
+The plugin is a thin workflow layer over Orbit's MCP server:
+
+| | Provided by |
+|---|---|
+| `search` / `integrate` tools, request + response schemas | Orbit's MCP server (bundled) |
+| Capability decomposition, gap analysis, iteration, saved blueprint | This plugin's skill |
+
+Keeping the API contract on the server side means Orbit can change its parameters
+without breaking installed copies of the plugin. If the MCP server is ever
+unreachable, the skill falls back to the documented REST endpoints in
+[references/orbit-api.md](skills/discover/references/orbit-api.md).
 
 ## Orbit vs postman:search
 

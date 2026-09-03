@@ -1,7 +1,13 @@
-# Orbit API Reference
+# Orbit API Reference — REST fallback
 
 Docs: https://www.buildwithorbit.ai/api-reference
 OpenAPI: https://www.buildwithorbit.ai/openapi.json
+
+> **Prefer the MCP tools.** This plugin bundles Orbit's MCP server, so
+> `mcp__plugin_orbit_orbit__search` and `mcp__plugin_orbit_orbit__integrate` are
+> normally available and carry live, self-describing schemas. Use the REST calls below
+> only when those tools are unavailable. See [MCP tools](#mcp-tools) at the end for the
+> mapping.
 
 **Base URL:** `https://api.buildwithorbit.ai`
 
@@ -115,7 +121,7 @@ Takes no query parameters.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `task` | string | Yes | What you want to accomplish. 1–512 characters, must contain non-whitespace. |
-| `resources` | array | Yes | Endpoints to integrate. Each item needs `id` and `type`. |
+| `resources` | array | Yes | Endpoints to integrate, 1–10 items. Each item needs `id` and `type`. The MCP tool schema enforces a max of 10; the published OpenAPI spec omits the limit, so assume it applies to REST too and split larger sets across calls. |
 | `resources[].id` | string | Yes | The `id` from a `/v1/search` result, verbatim. |
 | `resources[].type` | string | Yes | The result's `resourceType`. Currently only `endpoint`. |
 
@@ -189,3 +195,36 @@ Sends a transactional email through Brevo's SMTP API, enabling an agent to deliv
 Use for: send transactional messages, deliver notifications, send account emails
 Not supported: inbound email processing, contact management, campaign analytics
 ```
+
+---
+
+## MCP tools
+
+The plugin bundles Orbit's MCP server (`https://mcp.buildwithorbit.ai/mcp`, HTTP
+transport, no auth) via `.mcp.json`. It exposes two tools that map one-to-one onto the
+REST endpoints and return identical payloads:
+
+| MCP tool | REST equivalent |
+|----------|-----------------|
+| `mcp__plugin_orbit_orbit__search` | `POST /v1/search` |
+| `mcp__plugin_orbit_orbit__integrate` | `POST /v1/integrate` |
+
+Differences from REST:
+
+- `limit` and `cursor` are ordinary tool arguments, not query parameters.
+- Both tools accept an optional `clientName` string for anonymous usage analytics.
+  Pass `"claude-code/orbit-plugin"`.
+- `integrate` declares `resources` as 1–10 items in its schema.
+
+The tool schemas are the authoritative contract — they are fetched live from the
+server, so they stay correct even when this file drifts.
+
+### Query guidance (from the tool description)
+
+- Use focused keyword queries including the product or provider name plus the endpoint
+  detail — e.g. `"PayPal create invoice"`.
+- Natural language works too — e.g. `"PayPal API to create an invoice"`.
+- Avoid jumbled queries cramming unrelated keywords together — e.g.
+  `"paypal invoice payment delivery payments ordering"`.
+- Avoid `OR`-separated queries — e.g. `"paypal invoice OR paypal create invoice"`.
+- To explore multiple intents, make a separate call per intent.
