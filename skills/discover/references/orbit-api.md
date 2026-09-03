@@ -1,78 +1,191 @@
 # Orbit API Reference
 
-## Endpoint
+Docs: https://www.buildwithorbit.ai/api-reference
+OpenAPI: https://www.buildwithorbit.ai/openapi.json
 
-```
-POST https://fabric-gateway.postmanlabs.com/api/search
-Content-Type: application/json
-```
+**Base URL:** `https://api.buildwithorbit.ai`
 
-## Request
+No authentication is required. Only `Content-Type: application/json` is needed.
+
+There are two endpoints: `/v1/search` finds candidate endpoints, `/v1/integrate` turns
+the ones you pick into a task brief.
+
+---
+
+## POST /v1/search
+
+Describe your goal in `q`. Returns matching public endpoints, each with an
+`evaluateGuide` explaining what it does, when to use it, and its limitations.
+
+### Query parameters
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `limit` | integer | 10 | Results per page. Min 1, max 25. |
+| `cursor` | string | — | Pass `meta.nextCursor` from the previous response. Omit for the first page. |
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `q` | string | Yes | Natural language query, keywords, an API name, or a question. 1–512 characters. |
+
+`q` is the only accepted body field — unknown fields return `400`.
 
 ```json
-{
-  "q": "your search query"
-}
+{ "q": "Add tracking details for an existing paypal order" }
 ```
 
-The query should describe the capability you need — e.g., "payment processing for subscriptions", "send transactional email", "geocoding addresses".
-
-## Example curl
+### Example curl
 
 ```bash
-curl -s -X POST https://fabric-gateway.postmanlabs.com/api/search \
-  -H "Content-Type: application/json" \
+curl -s -X POST 'https://api.buildwithorbit.ai/v1/search?limit=10' \
+  -H 'Content-Type: application/json' \
   -d '{"q": "payment processing"}' | jq .
 ```
 
-## Response schema
+### Response (200)
 
 ```json
 {
   "data": [
     {
-      "id": "string",
-      "name": "string",
+      "id": "urn:orbit:endpoint:v1:...:brevo:send-a-transactional-ema",
+      "resourceType": "endpoint",
+      "name": "Send a transactional email",
       "description": "string",
-      "method": "GET | POST | PUT | PATCH | DELETE",
-      "url": "string (the API endpoint URL)",
-      "evaluateGuide": "string (agent-oriented usage guidance)"
+      "method": "POST",
+      "url": "https://api.brevo.com/v3/smtp/email",
+      "evaluateGuide": "string",
+      "provider": "Brevo",
+      "product": "Brevo"
     }
   ],
   "meta": {
-    "q": "string (echo of search query)",
-    "total": "number (total matching results)",
-    "nextCursor": "string | null (pagination cursor)"
+    "q": "send transactional email",
+    "total": 2,
+    "nextCursor": "eyJmcm9tIjoyfQ=="
   }
 }
 ```
 
-## Field descriptions
-
 | Field | Description |
 |-------|-------------|
-| `id` | Unique identifier for the API endpoint |
+| `id` | Opaque identifier of the form `urn:orbit:endpoint:v1:...`. Pass it back verbatim to `/v1/integrate` — never parse or construct it. |
+| `resourceType` | Kind of entity, e.g. `endpoint`. Pass it to `/v1/integrate` as the resource's `type`. |
 | `name` | Human-readable name of the endpoint |
-| `description` | Brief description of what the endpoint does |
-| `method` | HTTP method (GET, POST, PUT, PATCH, DELETE) |
-| `url` | The API endpoint URL |
-| `evaluateGuide` | Agent-oriented guidance — what the endpoint does, what it's good for ("Use for"), and what it can't do ("Not supported"). This is the key differentiator for AI agent consumption |
+| `description` | What the endpoint does (may be empty) |
+| `method` | HTTP method used to call the endpoint |
+| `url` | URL the endpoint is called at |
+| `evaluateGuide` | Three-part evaluation: brief summary, recommended use cases, unsupported use cases/limitations |
+| `provider` / `product` | Owning provider and product (returned by the live API; not in the published OpenAPI spec, so treat as optional) |
 
-## The evaluateGuide field
+`meta` carries `q`, `total`, and `nextCursor`. **`nextCursor` is absent on the last
+page** — check for its presence rather than comparing to `null`.
 
-The `evaluateGuide` is what makes Orbit results agent-friendly. It provides structured guidance so an AI agent can quickly decide whether an API fits its needs without trial-and-error:
+### Pagination
 
-- **What it does** — a concise description of the endpoint's purpose
-- **Use for** — specific scenarios where this endpoint is the right choice
-- **Not supported** — capabilities this endpoint does not cover, preventing wasted integration effort
+Pass `nextCursor` as the `cursor` **query parameter** (not a body field):
 
-## Pagination
+```bash
+curl -s -X POST 'https://api.buildwithorbit.ai/v1/search?cursor=eyJmcm9tIjoyfQ==' \
+  -H 'Content-Type: application/json' \
+  -d '{"q": "payment processing"}'
+```
 
-When `meta.nextCursor` is non-null, pass it as `"cursor"` in the next request body to fetch more results:
+Pagination stops at 40 results total; a cursor past 40 is rejected.
+
+### Errors
+
+`400` invalid input · `429` rate limited · `500` server error.
+Error bodies are RFC 9457 problem details: `type`, `title`, `status`, `detail`, `instance`.
+
+---
+
+## POST /v1/integrate
+
+After selecting endpoints from `/v1/search`, send them here along with the task you
+want to accomplish. Returns a **task brief** with the information and steps needed to
+call those endpoints.
+
+Takes no query parameters.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `task` | string | Yes | What you want to accomplish. 1–512 characters, must contain non-whitespace. |
+| `resources` | array | Yes | Endpoints to integrate. Each item needs `id` and `type`. |
+| `resources[].id` | string | Yes | The `id` from a `/v1/search` result, verbatim. |
+| `resources[].type` | string | Yes | The result's `resourceType`. Currently only `endpoint`. |
 
 ```json
 {
-  "q": "payment processing",
-  "cursor": "value-from-nextCursor"
+  "task": "Build an app to post current weather to Slack",
+  "resources": [
+    { "id": "urn:orbit:endpoint:v1:...:weatherapi-com:current-weather-json", "type": "endpoint" },
+    { "id": "urn:orbit:endpoint:v1:...:slack:send-message-to-slack", "type": "endpoint" }
+  ]
 }
+```
+
+### Example curl
+
+```bash
+curl -s -X POST https://api.buildwithorbit.ai/v1/integrate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "task": "Send a transactional email when a user signs up",
+    "resources": [
+      { "id": "urn:orbit:endpoint:v1:...:sendmux:send-a-single-email", "type": "endpoint" }
+    ]
+  }' | jq -r '.data[0].taskBrief'
+```
+
+### Response (200)
+
+```json
+{
+  "data": [
+    { "taskBrief": "string" }
+  ]
+}
+```
+
+The `taskBrief` is a multi-line document covering FIT, AUTH (including which
+credentials you must supply), BASE URL, STEPS with parameters and expected responses,
+dependencies between steps, and important considerations. It is built from the
+selected endpoints' schemas plus shared variables, auth settings, and descriptions
+defined by their parent APIs.
+
+### Errors
+
+`400` invalid input · `404` none of the `id`s could be resolved · `429` rate limited ·
+`500` server error.
+
+---
+
+## Idempotency
+
+Both endpoints are read-only and never create or mutate data, so retries are safe and
+no idempotency key is needed. Search results may change as the public catalog changes;
+task brief wording may vary between otherwise identical calls.
+
+## The evaluateGuide field
+
+`evaluateGuide` is what makes Orbit results agent-friendly. It is a newline-separated
+string in three parts, so an agent can decide whether an API fits without
+trial-and-error:
+
+- **Summary** — a concise description of the endpoint's purpose
+- **`Use for:`** — specific scenarios where this endpoint is the right choice
+- **`Not supported:`** — capabilities this endpoint does not cover, preventing wasted
+  integration effort
+
+Example:
+
+```
+Sends a transactional email through Brevo's SMTP API, enabling an agent to deliver an email payload to recipients.
+Use for: send transactional messages, deliver notifications, send account emails
+Not supported: inbound email processing, contact management, campaign analytics
 ```
