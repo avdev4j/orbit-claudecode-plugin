@@ -9,12 +9,21 @@ Orbit is Postman's API discovery service built specifically for AI agent consump
 ## Install
 
 ```bash
-claude plugin add Postman-Devrel/orbit-claudecode-plugin
+claude plugin marketplace add Postman-Devrel/orbit-claudecode-plugin
+claude plugin install orbit@orbit-marketplace
 ```
 
 The plugin bundles Orbit's MCP server, so there's nothing else to configure -- no API
 key, no `claude mcp add`. Installing the plugin wires up the `search` and `integrate`
 tools, and the skill drives them.
+
+Then run `/orbit:discover <capability>` in a new session.
+
+To hack on it locally without installing, point Claude Code at a checkout:
+
+```bash
+claude --plugin-dir ./orbit-claudecode-plugin
+```
 
 ## Usage
 
