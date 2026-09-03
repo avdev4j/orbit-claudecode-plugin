@@ -50,9 +50,11 @@ Multiple capabilities: comma-separated or as separate arguments.
 5. **Integrate.** When the user has a concrete task and the endpoint set looks right,
    call `mcp__plugin_orbit_orbit__integrate`:
    - `task` — what they're building (required, max 512 chars)
-   - `resources` — **1 to 10** entries of `{id, type}`, where `id` and `type` come from
-     a search result's `id` and `resourceType`. More than 10 is rejected; if the user
-     needs more, split into several calls by sub-task.
+   - `resources` — entries of `{id, type}`, where `id` and `type` come from a search
+     result's `id` and `resourceType`. The schema allows up to 10, but **keep calls
+     narrow — 2 or 3 related endpoints**. Wide calls have been observed to return a
+     one-line restatement instead of a real brief. To cover more endpoints, make
+     several focused calls grouped by sub-task rather than one wide call.
 
    Save the returned `taskBrief` to `orbit-output/<slugified-task>-brief.md`. It covers
    auth requirements, base URLs, ordered request steps, parameters, inter-step
